@@ -1,0 +1,81 @@
+[package]
+name = "kmaruda-laps"
+version = "2.0.0"
+description = "KMAruda LAPS — чтение паролей локальных администраторов (LAPS) из Active Directory. Нативный LDAP-клиент, без PowerShell и RSAT."
+authors = ["KMAruda Development Team"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.82"
+
+[lib]
+name = "app_lib"
+crate-type = ["cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.2" }
+
+[dependencies]
+tauri = { version = "2.11.2", features = [] }
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-opener = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+# Нативный LDAP-клиент: запросы к AD выполняются напрямую из Rust,
+# без PowerShell, RSAT и модуля LAPS (архитектура — как в kmaruda-phonebook).
+ldap3 = "0.11"
+
+# Gzip-архивация журнала аудита прошлых запусков (pure Rust, без OpenSSL).
+flate2 = "1"
+# Base64 для -EncodedCommand запасного уровня дешифровки LAPS.
+base64 = "0.22"
+
+# Дата/время: FILETIME AD (100-нс интервалы с 1601 г.) <-> RFC 3339,
+# локальный часовой пояс для отображения сроков действия паролей.
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+# Гарантированное затирание секретов (пароль bind-учётки) в памяти.
+zeroize = { version = "1", features = ["derive"] }
+
+# PNG-иконка окна (встраивается в бинарник, не зависит от кэша иконок Windows).
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.dependencies]
+# Интегрированная аутентификация (Kerberos/NTLM текущей сессии Windows) через SSPI.
+ldap3 = { version = "0.11", features = ["gssapi"] }
+# Версия webview2-com ОБЯЗАНА совпадать с версией, которую использует wry
+# (транзитивно через tauri): объект `webview.controller()` в `with_webview`
+# приходит из wry, и QueryInterface-приведения к ICoreWebView2SettingsN
+# компилируются только против того же экземпляра crate. wry 0.57 → 0.39.x.
+webview2-com = "0.39.1"
+# Trait `Interface` (метод .cast()) той же версии windows-core, на которой
+# собран webview2-com-sys 0.39 (windows-core 0.62). Отдельная зависимость:
+# crate `windows` ниже остаётся на 0.61 для реестровых API (webview_prereq).
+windows-core = "0.62"
+windows = { version = "0.61.3", features = [
+    "Win32_Foundation",
+    "Win32_Security_Cryptography",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+# Ограничение потребления памяти при локальной разработке/CI.
+[profile.dev]
+debug = 0
+
+[profile.dev.package."*"]
+debug = 0
